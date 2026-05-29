@@ -1,0 +1,330 @@
+
+<h2 class="sr-only">GPS Distance Meter — tap Set Start to begin measuring distance from your current location</h2>
+
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font-sans); }
+  .container { padding: 1rem 0; max-width: 380px; }
+  .status-card {
+    background: var(--color-background-secondary);
+    border-radius: var(--border-radius-lg);
+    padding: 1rem 1.25rem;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: #888; flex-shrink: 0;
+    transition: background 0.3s;
+  }
+  .dot.active { background: #1D9E75; }
+  .dot.error { background: #E24B4A; }
+  .status-text { font-size: 13px; color: var(--color-text-secondary); }
+  .metric-row {
+    display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr);
+    gap: 10px; margin-bottom: 12px;
+  }
+  .metric {
+    background: var(--color-background-secondary);
+    border-radius: var(--border-radius-md);
+    padding: 1rem;
+    text-align: center;
+  }
+  .metric-label {
+    font-size: 12px; color: var(--color-text-secondary);
+    margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .metric-value {
+    font-size: 22px; font-weight: 500; color: var(--color-text-primary);
+    line-height: 1.2;
+  }
+  .metric-unit { font-size: 13px; color: var(--color-text-secondary); font-weight: 400; }
+  .big-distance {
+    background: var(--color-background-primary);
+    border: 0.5px solid var(--color-border-tertiary);
+    border-radius: var(--border-radius-lg);
+    padding: 1.5rem;
+    text-align: center;
+    margin-bottom: 12px;
+  }
+  .dist-label { font-size: 13px; color: var(--color-text-secondary); margin-bottom: 6px; }
+  .dist-value { font-size: 42px; font-weight: 500; color: var(--color-text-primary); line-height: 1; }
+  .dist-unit { font-size: 18px; color: var(--color-text-secondary); font-weight: 400; }
+  .btn-row { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 10px; margin-bottom: 12px; }
+  button {
+    padding: 12px; border-radius: var(--border-radius-md);
+    border: 0.5px solid var(--color-border-secondary);
+    background: var(--color-background-primary);
+    color: var(--color-text-primary);
+    font-size: 14px; font-weight: 500; cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+  }
+  button:hover { background: var(--color-background-secondary); }
+  button:active { transform: scale(0.98); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary {
+    background: var(--color-text-primary); color: var(--color-background-primary);
+    border-color: transparent;
+  }
+  button.primary:hover { opacity: 0.85; }
+  button.danger { color: #E24B4A; border-color: #F09595; }
+  .path-card {
+    background: var(--color-background-secondary);
+    border-radius: var(--border-radius-lg);
+    padding: 1rem 1.25rem;
+    margin-bottom: 12px;
+  }
+  .path-title { font-size: 13px; color: var(--color-text-secondary); margin-bottom: 8px; }
+  canvas { display: block; width: 100%; height: 140px; border-radius: var(--border-radius-md); }
+  .coords { font-size: 11px; color: var(--color-text-tertiary); line-height: 1.6; margin-top: 4px; }
+  .history-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 0; border-bottom: 0.5px solid var(--color-border-tertiary);
+    font-size: 13px;
+  }
+  .history-item:last-child { border-bottom: none; }
+</style>
+
+<div class="container">
+  <div class="status-card">
+    <div class="dot" id="dot"></div>
+    <span class="status-text" id="status-text">Tap "Set Start" to begin</span>
+  </div>
+
+  <div class="big-distance">
+    <div class="dist-label">distance from start</div>
+    <div>
+      <span class="dist-value" id="dist-value">—</span>
+      <span class="dist-unit" id="dist-unit"> m</span>
+    </div>
+  </div>
+
+  <div class="metric-row">
+    <div class="metric">
+      <div class="metric-label">total path</div>
+      <div class="metric-value" id="total-val">—<span class="metric-unit"> m</span></div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">waypoints</div>
+      <div class="metric-value" id="pts-val">0</div>
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button class="primary" id="btn-start" onclick="setStart()">
+      <i class="ti ti-map-pin" aria-hidden="true"></i> Set Start
+    </button>
+    <button id="btn-measure" onclick="measureNow()" disabled>
+      <i class="ti ti-ruler" aria-hidden="true"></i> Measure
+    </button>
+  </div>
+
+  <div class="btn-row">
+    <button id="btn-watch" onclick="toggleWatch()" disabled>
+      <i class="ti ti-player-play" aria-hidden="true" id="watch-icon"></i>
+      <span id="watch-label">Live Track</span>
+    </button>
+    <button class="danger" onclick="resetAll()">
+      <i class="ti ti-refresh" aria-hidden="true"></i> Reset
+    </button>
+  </div>
+
+  <div class="path-card">
+    <div class="path-title">path preview</div>
+    <canvas id="pathCanvas" width="320" height="140"></canvas>
+    <div class="coords" id="coords-text">No location yet</div>
+  </div>
+
+  <div class="path-card" id="history-card" style="display:none">
+    <div class="path-title">measurement log</div>
+    <div id="history-list"></div>
+  </div>
+</div>
+
+<script>
+let startCoord = null;
+let currentCoord = null;
+let waypoints = [];
+let totalPath = 0;
+let watchId = null;
+let isWatching = false;
+let history = [];
+
+function haversine(a, b) {
+  const R = 6371000;
+  const dLat = (b.lat - a.lat) * Math.PI / 180;
+  const dLon = (b.lon - a.lon) * Math.PI / 180;
+  const la = Math.sin(dLat/2)**2 + Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(la), Math.sqrt(1-la));
+}
+
+function fmt(m) {
+  if (m >= 1000) return { val: (m/1000).toFixed(2), unit: ' km' };
+  return { val: Math.round(m), unit: ' m' };
+}
+
+function setStatus(msg, state) {
+  document.getElementById('status-text').textContent = msg;
+  const dot = document.getElementById('dot');
+  dot.className = 'dot' + (state === 'ok' ? ' active' : state === 'err' ? ' error' : '');
+}
+
+function setStart() {
+  setStatus('Getting location…', '');
+  navigator.geolocation.getCurrentPosition(pos => {
+    startCoord = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+    currentCoord = { ...startCoord };
+    waypoints = [{ ...startCoord }];
+    totalPath = 0;
+    history = [];
+    setStatus('Start set. Move and tap Measure!', 'ok');
+    document.getElementById('btn-measure').disabled = false;
+    document.getElementById('btn-watch').disabled = false;
+    document.getElementById('dist-value').textContent = '0';
+    document.getElementById('dist-unit').textContent = ' m';
+    document.getElementById('total-val').innerHTML = '0<span class="metric-unit"> m</span>';
+    document.getElementById('pts-val').textContent = '1';
+    updateCoordsText(startCoord);
+    drawPath();
+  }, err => {
+    setStatus('Location error: ' + err.message, 'err');
+  }, { enableHighAccuracy: true });
+}
+
+function measureNow() {
+  if (!startCoord) return;
+  setStatus('Measuring…', '');
+  navigator.geolocation.getCurrentPosition(pos => {
+    const c = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+    const d = haversine(startCoord, c);
+    const seg = haversine(waypoints[waypoints.length-1], c);
+    totalPath += seg;
+    waypoints.push(c);
+    currentCoord = c;
+    const df = fmt(d);
+    const tf = fmt(totalPath);
+    document.getElementById('dist-value').textContent = df.val;
+    document.getElementById('dist-unit').textContent = df.unit;
+    document.getElementById('total-val').innerHTML = tf.val + '<span class="metric-unit">' + tf.unit + '</span>';
+    document.getElementById('pts-val').textContent = waypoints.length;
+    history.push({ d: df.val + df.unit, t: tf.val + tf.unit, pts: waypoints.length });
+    updateHistory();
+    updateCoordsText(c);
+    drawPath();
+    setStatus('Updated! Move further and measure again.', 'ok');
+  }, err => {
+    setStatus('Error: ' + err.message, 'err');
+  }, { enableHighAccuracy: true });
+}
+
+function toggleWatch() {
+  if (!startCoord) return;
+  if (isWatching) {
+    navigator.geolocation.clearWatch(watchId);
+    isWatching = false;
+    document.getElementById('watch-icon').className = 'ti ti-player-play';
+    document.getElementById('watch-label').textContent = 'Live Track';
+    setStatus('Live tracking paused.', 'ok');
+  } else {
+    isWatching = true;
+    document.getElementById('watch-icon').className = 'ti ti-player-pause';
+    document.getElementById('watch-label').textContent = 'Stop Track';
+    setStatus('Live tracking…', 'ok');
+    watchId = navigator.geolocation.watchPosition(pos => {
+      const c = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+      const d = haversine(startCoord, c);
+      const last = waypoints[waypoints.length - 1];
+      const seg = haversine(last, c);
+      if (seg > 1) {
+        totalPath += seg;
+        waypoints.push(c);
+        document.getElementById('pts-val').textContent = waypoints.length;
+        const tf = fmt(totalPath);
+        document.getElementById('total-val').innerHTML = tf.val + '<span class="metric-unit">' + tf.unit + '</span>';
+        drawPath();
+      }
+      currentCoord = c;
+      const df = fmt(d);
+      document.getElementById('dist-value').textContent = df.val;
+      document.getElementById('dist-unit').textContent = df.unit;
+      updateCoordsText(c);
+    }, err => {
+      setStatus('Watch error: ' + err.message, 'err');
+    }, { enableHighAccuracy: true, maximumAge: 2000 });
+  }
+}
+
+function resetAll() {
+  if (isWatching) { navigator.geolocation.clearWatch(watchId); isWatching = false; }
+  startCoord = null; currentCoord = null; waypoints = []; totalPath = 0; history = [];
+  document.getElementById('dist-value').textContent = '—';
+  document.getElementById('dist-unit').textContent = ' m';
+  document.getElementById('total-val').innerHTML = '—<span class="metric-unit"> m</span>';
+  document.getElementById('pts-val').textContent = '0';
+  document.getElementById('btn-measure').disabled = true;
+  document.getElementById('btn-watch').disabled = true;
+  document.getElementById('watch-icon').className = 'ti ti-player-play';
+  document.getElementById('watch-label').textContent = 'Live Track';
+  document.getElementById('history-card').style.display = 'none';
+  document.getElementById('history-list').innerHTML = '';
+  setStatus('Reset. Tap "Set Start" to begin.', '');
+  updateCoordsText(null);
+  drawPath();
+}
+
+function updateCoordsText(c) {
+  document.getElementById('coords-text').textContent = c
+    ? 'Lat: ' + c.lat.toFixed(6) + '  Lon: ' + c.lon.toFixed(6)
+    : 'No location yet';
+}
+
+function updateHistory() {
+  const card = document.getElementById('history-card');
+  const list = document.getElementById('history-list');
+  card.style.display = 'block';
+  list.innerHTML = history.slice(-6).reverse().map((h,i) =>
+    `<div class="history-item"><span>#${history.length - i} — ${h.d} from start</span><span style="color:var(--color-text-secondary)">${h.t} total</span></div>`
+  ).join('');
+}
+
+function drawPath() {
+  const canvas = document.getElementById('pathCanvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  if (waypoints.length < 1) return;
+  if (waypoints.length === 1) {
+    ctx.beginPath();
+    ctx.arc(W/2, H/2, 6, 0, Math.PI*2);
+    ctx.fillStyle = '#1D9E75';
+    ctx.fill();
+    return;
+  }
+  const lats = waypoints.map(p => p.lat);
+  const lons = waypoints.map(p => p.lon);
+  const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+  const minLon = Math.min(...lons), maxLon = Math.max(...lons);
+  const pad = 24;
+  const scaleX = (maxLon === minLon) ? 1 : (W - pad*2) / (maxLon - minLon);
+  const scaleY = (maxLat === minLat) ? 1 : (H - pad*2) / (maxLat - minLat);
+  const tx = p => pad + (p.lon - minLon) * scaleX;
+  const ty = p => H - pad - (p.lat - minLat) * scaleY;
+  ctx.beginPath();
+  ctx.moveTo(tx(waypoints[0]), ty(waypoints[0]));
+  for (let i = 1; i < waypoints.length; i++) ctx.lineTo(tx(waypoints[i]), ty(waypoints[i]));
+  ctx.strokeStyle = '#378ADD';
+  ctx.lineWidth = 2;
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+  ctx.beginPath(); ctx.arc(tx(waypoints[0]), ty(waypoints[0]), 5, 0, Math.PI*2);
+  ctx.fillStyle = '#1D9E75'; ctx.fill();
+  const last = waypoints[waypoints.length-1];
+  ctx.beginPath(); ctx.arc(tx(last), ty(last), 5, 0, Math.PI*2);
+  ctx.fillStyle = '#E24B4A'; ctx.fill();
+}
+
+drawPath();
+</script>
